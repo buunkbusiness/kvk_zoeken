@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include kvk_zoeken *.css
+recursive-include kvk_zoeken *.csv
+recursive-include kvk_zoeken *.html
+recursive-include kvk_zoeken *.ico
+recursive-include kvk_zoeken *.js
+recursive-include kvk_zoeken *.json
+recursive-include kvk_zoeken *.md
+recursive-include kvk_zoeken *.png
+recursive-include kvk_zoeken *.py
+recursive-include kvk_zoeken *.svg
+recursive-include kvk_zoeken *.txt
+recursive-exclude kvk_zoeken *.pyc

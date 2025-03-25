@@ -2,6 +2,22 @@
 
 KvK zoeken integratie voor Frappe Framework. Zoeken in het Nederlandse handelsregister.
 
+## Features
+
+- Search the Dutch Chamber of Commerce (KVK) registry
+- Search by KVK number, company name, or address
+- Create relations from KVK data
+- Automatic synchronization of KVK data
+- React component for frontend integration
+
+## Installation
+
+### Using Bench
+
+```bash
+cd your-bench-directory
+bench get-app https://github.com/buunkbusiness/kvk_zoeken
+bench --site your-site.local install-app kvk_zoeken
 ### Installation
 
 You can install this app using the [bench](https://github.com/frappe/bench) CLI:

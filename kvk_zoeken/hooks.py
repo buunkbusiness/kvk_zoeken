@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/kvk_zoeken/css/kvk_zoeken.css"
-# app_include_js = "/assets/kvk_zoeken/js/kvk_zoeken.js"
+app_include_js = "/assets/kvk_zoeken/js/kvk_zoeken.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/kvk_zoeken/css/kvk_zoeken.css"
@@ -143,7 +143,7 @@ app_license = "mit"
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
+scheduler_events = {
 # 	"all": [
 # 		"kvk_zoeken.tasks.all"
 # 	],
@@ -153,13 +153,13 @@ app_license = "mit"
 # 	"hourly": [
 # 		"kvk_zoeken.tasks.hourly"
 # 	],
-# 	"weekly": [
-# 		"kvk_zoeken.tasks.weekly"
-# 	],
+ 	"weekly": [
+ 		"kvk_zoeken.kvk_zoeken.api.bulk_sync_kvk_relations"
+ 	],
 # 	"monthly": [
 # 		"kvk_zoeken.tasks.monthly"
 # 	],
-# }
+}
 
 # Testing
 # -------
