@@ -154,7 +154,7 @@ scheduler_events = {
 # 		"kvk_zoeken.tasks.hourly"
 # 	],
  	"weekly": [
- 		"kvk_zoeken.kvk_zoeken.api.bulk_sync_kvk_relations"
+ 		"kvk_zoeken.api.bulk_sync_kvk_relations"
  	],
 # 	"monthly": [
 # 		"kvk_zoeken.tasks.monthly"

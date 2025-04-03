@@ -187,7 +187,16 @@ def create_relation_from_kvk(kvk_nummer, administration=None, company_name=None,
                 if addr.get("plaats"):
                     formatted_address += addr["plaats"]
                     relation.city = addr["plaats"]
-                    
+        
+            # Make sure to map the street address to address1 field
+            if addr.get("straatnaam") and addr.get("huisnummer"):
+                street_address = f"{addr['straatnaam']} {addr['huisnummer']}"
+                if addr.get("huisletter"):
+                    street_address += addr["huisletter"]
+                relation.address1 = street_address
+            elif addr.get("straatHuisnummer"):
+                relation.address1 = addr["straatHuisnummer"]
+                
             if addr.get("land"):
                 formatted_address += "\n" + addr["land"]
                 relation.country = addr["land"]
@@ -212,3 +221,4 @@ def create_relation_from_kvk(kvk_nummer, administration=None, company_name=None,
             "success": False,
             "message": str(e)
         }
+
