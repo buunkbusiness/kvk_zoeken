@@ -116,11 +116,11 @@ def search_kvk(search_term=None, kvk_nummer=None, naam=None, postcode=None,
 def process_kvk_address(address_data, provided_address=None):
     """
     Process address data from KVK API response
-    
+
     Args:
         address_data: Address data from KVK API
         provided_address: Optional pre-formatted address
-        
+
     Returns:
         dict: Processed address data with keys:
             - formatted_address: Full formatted address
@@ -136,50 +136,54 @@ def process_kvk_address(address_data, provided_address=None):
         "city": "",
         "country": "Netherlands"  # Default for Dutch companies
     }
-    
+
     if not address_data and not provided_address:
         return result
-        
+
     # If a pre-formatted address is provided, use it
     if provided_address:
         result["formatted_address"] = provided_address
         return result
-        
+
     # Handle domestic address (binnenlandsAdres)
     if address_data.get("binnenlandsAdres"):
         addr = address_data["binnenlandsAdres"]
-        
+
         # Process street address
-        street_address = ""
-        if addr.get("straatnaam") and addr.get("huisnummer"):
-            street_address = f"{addr['straatnaam']} {addr['huisnummer']}"
+        street_address = addr.get("straatnaam", "")
+        if addr.get("huisnummer"):
+            street_address += f" {addr['huisnummer']}"
             if addr.get("huisletter"):
                 street_address += addr["huisletter"]
-        result["street_address"] = street_address
-        
+        result["street_address"] = street_address.strip() or addr.get("plaats", "Unknown City")
+
         # Process postal code and city
         result["postal_code"] = addr.get("postcode", "")
         result["city"] = addr.get("plaats", "")
-        
+
+        # Ensure address_line1 fallback
+        if not result["street_address"]:
+            result["street_address"] = result["city"] or "Unknown City"
+
         # Build formatted address
-        formatted_address = street_address
+        formatted_address = result["street_address"]
         if result["postal_code"] or result["city"]:
             formatted_address += "\n"
             if result["postal_code"]:
                 formatted_address += result["postal_code"] + " "
             if result["city"]:
                 formatted_address += result["city"]
-        
+
         formatted_address += "\nNetherlands"
         result["formatted_address"] = formatted_address
-                
+
     # Handle foreign address (buitenlandsAdres)
     elif address_data.get("buitenlandsAdres"):
         addr = address_data["buitenlandsAdres"]
-        
+
         # Process street address
         result["street_address"] = addr.get("straatHuisnummer", "")
-        
+
         # Process postal code and city
         postal_city = addr.get("postcodeWoonplaats", "")
         if postal_city:
@@ -190,21 +194,117 @@ def process_kvk_address(address_data, provided_address=None):
                 result["city"] = parts[1].strip()
             else:
                 result["city"] = postal_city
-        
+
+        # Ensure address_line1 fallback
+        if not result["street_address"]:
+            result["street_address"] = result["city"] or "Unknown City"
+
         # Process country
-        if addr.get("land"):
-            result["country"] = addr.get("land")
-        
+        result["country"] = addr.get("land", "Netherlands")
+
         # Build formatted address
         formatted_address = result["street_address"]
         if postal_city:
             formatted_address += "\n" + postal_city
         if result["country"]:
             formatted_address += "\n" + result["country"]
-        
+
         result["formatted_address"] = formatted_address
-            
+
+    # Log incomplete address for debugging
+    if not result["formatted_address"]:
+        frappe.logger().debug(f"Incomplete address data: {address_data}")
+
     return result
+
+def process_kvk_addresses(addresses_data):
+    """
+    Process multiple address entries from KVK API response
+
+    Args:
+        addresses_data: List of address data from KVK API
+
+    Returns:
+        list: List of processed address data dictionaries
+    """
+    processed_addresses = []
+
+    for address_data in addresses_data:
+        result = {
+            "formatted_address": "",
+            "street_address": "",
+            "postal_code": "",
+            "city": "",
+            "country": "Netherlands"  # Default for Dutch companies
+        }
+
+        # Handle domestic address (binnenlandsAdres)
+        if address_data.get("binnenlandsAdres"):
+            addr = address_data["binnenlandsAdres"]
+
+            # Process street address
+            street_address = ""
+            if addr.get("straatnaam"):  
+                street_address = addr["straatnaam"]
+            if addr.get("straatnaam") and addr.get("huisnummer"):
+                street_address = f"{addr['straatnaam']} {addr['huisnummer']}"
+                if addr.get("huisletter"):
+                    street_address += addr["huisletter"]
+            result["street_address"] = street_address or addr.get("plaats", "Unknown City")
+
+            # Process postal code and city
+            result["postal_code"] = addr.get("postcode", "")
+            result["city"] = addr.get("plaats", "")
+
+            # Build formatted address
+            formatted_address = street_address or result["city"]
+            if result["postal_code"] or result["city"]:
+                formatted_address += "\n"
+                if result["postal_code"]:
+                    formatted_address += result["postal_code"] + " "
+                if result["city"]:
+                    formatted_address += result["city"]
+
+            formatted_address += "\nNetherlands"
+            result["formatted_address"] = formatted_address
+
+        # Handle foreign address (buitenlandsAdres)
+        elif address_data.get("buitenlandsAdres"):
+            addr = address_data["buitenlandsAdres"]
+
+            # Process street address
+            result["street_address"] = addr.get("straatHuisnummer", "")
+
+            # Process postal code and city
+            postal_city = addr.get("postcodeWoonplaats", "")
+            if postal_city:
+                # Try to extract postal code and city
+                parts = postal_city.split(" ", 1)
+                if len(parts) > 1 and parts[0].strip():
+                    result["postal_code"] = parts[0].strip()
+                    result["city"] = parts[1].strip()
+                else:
+                    result["city"] = postal_city
+
+            # Process country
+            result["country"] = addr.get("land", "Netherlands")
+
+            # Build formatted address
+            formatted_address = result["street_address"] or result["city"]
+            if postal_city:
+                formatted_address += "\n" + postal_city
+            if result["country"]:
+                formatted_address += "\n" + result["country"]
+
+            result["formatted_address"] = formatted_address
+
+        # Log incomplete address for debugging
+        if not result["formatted_address"]:
+            frappe.logger().debug(f"Incomplete address data: {address_data}")
+
+        processed_addresses.append(result)
+
+    return processed_addresses
 
 @frappe.whitelist()
 def create_relation_from_kvk(kvk_nummer, administration, company_name=None, company_type=None, 
@@ -257,6 +357,9 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
                 }
             
             company_data = kvk_data["resultaten"][0]
+        
+        # Log the response from the KVK server for debugging
+        frappe.log_error(f"KVK API Response: {kvk_data}", "KVK API Debug")
         
         # Check if relation with this KVK number already exists for the given administration
         # Make sure to use exact field names from the Relation DocType
@@ -312,7 +415,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         if is_active is not None:
             relation.is_active = is_active
         elif company_data:
-            relation.is_active = "Ja" if company_data.get("actief") == "Ja" else "Nee"
+            relation.is_active = "Ja" if company_data.get("actief", "Nee") == "Ja" else "Nee"
         else:
             relation.is_active = "Ja"  # Default to active
             
@@ -371,6 +474,31 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
             # Re-raise the error if it's not a duplicate issue or we couldn't find the duplicate
             raise
         
+        # Filter addresses for the specific company
+        filtered_results = [result for result in kvk_data.get("resultaten", []) if result.get("kvkNummer") == kvk_nummer]
+
+        # Process and save addresses for the filtered results
+        for result in filtered_results:
+            if "adres" in result:
+                processed_addresses = process_kvk_addresses([result["adres"]])
+                for address in processed_addresses:
+                    address_doc = frappe.new_doc("Address")
+                    address_doc.address_title = f"{relation.name} Address"
+                    address_doc.address_type = "Billing"  # Default type
+                    address_doc.address_line1 = address.get("street_address", "")
+                    address_doc.city = address.get("city", "")
+                    address_doc.country = address.get("country", "Netherlands")
+                    address_doc.pincode = address.get("postal_code", "")
+
+                    # Add dynamic link to Relation
+                    address_doc.append("links", {
+                        "link_doctype": "Relation",
+                        "link_name": relation.name
+                    })
+
+                    # Insert the Address document
+                    address_doc.insert()
+
         return {
             "success": True,
             "message": "Relation created successfully",
@@ -382,4 +510,57 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         return {
             "success": False,
             "message": str(e)
+        }
+
+@frappe.whitelist()
+def save_addresses_to_relation(relation_name, addresses_data):
+    """
+    Save multiple addresses as Address DocType linked to a Relation
+
+    Args:
+        relation_name: Name of the Relation to link addresses to
+        addresses_data: List of address data from KVK API
+
+    Returns:
+        dict: Result with success status and message
+    """
+    try:
+        # Process the addresses
+        processed_addresses = process_kvk_addresses(addresses_data)
+
+        for address in processed_addresses:
+            # Create a new Address document
+            address_doc = frappe.new_doc("Address")
+            address_doc.address_title = f"{relation_name} Address"
+            address_doc.address_type = "Billing"  # Default type, can be adjusted
+            address_doc.address_line1 = address.get("street_address", "")
+            address_doc.city = address.get("city", "")
+            address_doc.country = address.get("country", "Netherlands")
+            address_doc.pincode = address.get("postal_code", "")
+
+            # Ensure address_line1 is set correctly
+            street_address = address.get("street_address", "")
+            if not street_address:
+                street_address = address.get("city", "Unknown City")
+            address_doc.address_line1 = street_address
+
+            # Add dynamic link to Relation
+            address_doc.append("links", {
+                "link_doctype": "Relation",
+                "link_name": relation_name
+            })
+
+            # Insert the Address document
+            address_doc.insert()
+
+        return {
+            "success": True,
+            "message": f"Addresses successfully linked to Relation {relation_name}"
+        }
+
+    except Exception as e:
+        frappe.log_error(f"Error saving addresses to Relation: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Failed to save addresses to Relation {relation_name}: {str(e)}"
         }
