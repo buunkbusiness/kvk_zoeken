@@ -513,7 +513,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         }
 
 @frappe.whitelist()
-def save_addresses_to_relation(relation_name, addresses_data):
+def save_addresses_to_relation(relation_name, addresses_data, administration=None):
     """
     Save multiple addresses as Address DocType linked to a Relation
 
@@ -548,7 +548,7 @@ def save_addresses_to_relation(relation_name, addresses_data):
             address_doc.append("links", {
                 "link_doctype": "Relation",
                 "link_name": relation_name
-            })
+            }, "administration" if administration else None)
 
             # Insert the Address document
             address_doc.insert()
