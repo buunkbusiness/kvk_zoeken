@@ -106,11 +106,11 @@ def search_kvk(search_term=None, kvk_nummer=None, naam=None, postcode=None,
         except:
             pass
             
-        frappe.log_error(f"KVK API Error: {error_message}")
+        frappe.log_error("KVK API Error", error_message)
         return {"error": error_message, "status_code": status_code}
         
     except requests.exceptions.RequestException as e:
-        frappe.log_error(f"KVK API Error: {str(e)}")
+        frappe.log_error("KVK API Error", str(e))
         return {"error": str(e)}
 
 def process_kvk_address(address_data, provided_address=None):
@@ -359,7 +359,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
             company_data = kvk_data["resultaten"][0]
         
         # Log the response from the KVK server for debugging
-        frappe.log_error(f"KVK API Response: {kvk_data}", "KVK API Debug")
+        frappe.log_error("KVK API Debug", f"KVK API Response: {kvk_data}")
         
         # Check if relation with this KVK number already exists for the given administration
         # Make sure to use exact field names from the Relation DocType
@@ -506,7 +506,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         }
         
     except Exception as e:
-        frappe.log_error(f"Error creating relation from KVK: {str(e)}", "KVK API")
+        frappe.log_error("KVK API", f"Error creating relation from KVK: {str(e)}")
         return {
             "success": False,
             "message": str(e)
@@ -559,7 +559,7 @@ def save_addresses_to_relation(relation_name, addresses_data, administration=Non
         }
 
     except Exception as e:
-        frappe.log_error(f"Error saving addresses to Relation: {str(e)}")
+        frappe.log_error("KVK API", f"Error saving addresses to Relation: {str(e)}")
         return {
             "success": False,
             "message": f"Failed to save addresses to Relation {relation_name}: {str(e)}"
