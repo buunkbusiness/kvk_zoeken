@@ -213,7 +213,7 @@ def process_kvk_address(address_data, provided_address=None):
 
     # Log incomplete address for debugging
     if not result["formatted_address"]:
-        frappe.logger().debug(f"Incomplete address data: {address_data}")
+        frappe.log_error("Incomplete address data", {address_data})
 
     return result
 
@@ -300,7 +300,7 @@ def process_kvk_addresses(addresses_data):
 
         # Log incomplete address for debugging
         if not result["formatted_address"]:
-            frappe.logger().debug(f"Incomplete address data: {address_data}")
+            frappe.log_error("Incomplete address data", {address_data})
 
         processed_addresses.append(result)
 
@@ -369,7 +369,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         }
 
         # Log the filters for debugging
-        frappe.logger().debug(f"Checking for existing relation with filters: {filters}")
+        frappe.log_error("Checking for existing relation with filters", {filters})
 
         # Execute the query and log the SQL for debugging
         frappe.flags.in_test = True  # This will log the SQL query
@@ -381,10 +381,10 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         frappe.flags.in_test = False
         
         # Log the query results
-        frappe.logger().debug(f"Existing relation query results: {existing}")
+        frappe.log_error("Existing relation query results", {existing})
 
         if existing:
-            frappe.logger().debug(f"Found existing relation: {existing}")
+            frappe.log_error("Found existing relation", {existing})
             return {
                 "success": False,
                 "message": f"A relation with KVK number {kvk_nummer} already exists for administration {existing[0].get('administration', 'unknown')}",
@@ -448,9 +448,9 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         # Insert the relation and handle any potential errors
         try:
             relation.insert()
-            frappe.logger().debug(f"Relation inserted successfully: {relation.name}")
+            frappe.log_error(f"Relation inserted successfully: {relation.name}")
         except Exception as insert_error:
-            frappe.logger().error(f"Error inserting relation: {str(insert_error)}")
+            frappe.log_error(f"Error inserting relation: {str(insert_error)}")
             # Check if it's a duplicate entry error
             if "Duplicate entry" in str(insert_error):
                 # Try to find the existing relation again with a more flexible query
@@ -506,7 +506,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         }
         
     except Exception as e:
-        frappe.log_error("KVK API", f"Error creating relation from KVK: {str(e)}")
+        frappe.log_error("KVK API", frappe.get_traceback())
         return {
             "success": False,
             "message": str(e)
@@ -559,7 +559,7 @@ def save_addresses_to_relation(relation_name, addresses_data, administration=Non
         }
 
     except Exception as e:
-        frappe.log_error("KVK API", f"Error saving addresses to Relation: {str(e)}")
+        frappe.log_error("KVK API", frappe.get_traceback())
         return {
             "success": False,
             "message": f"Failed to save addresses to Relation {relation_name}: {str(e)}"
