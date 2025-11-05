@@ -8,6 +8,7 @@
   "api_settings_section",
   "api_key",
   "api_url",
+  "basisprofiel_api_url",
   "column_break_4",
   "enabled",
   "test_connection",
@@ -34,7 +35,14 @@
    "fieldname": "api_url",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "API URL",
+   "label": "Search API URL",
+   "reqd": 1
+  },
+  {
+   "default": "https://api.kvk.nl/api/v2/basisprofiel",
+   "fieldname": "basisprofiel_api_url",
+   "fieldtype": "Data",
+   "label": "Basisprofiel API URL",
    "reqd": 1
   },
   {
