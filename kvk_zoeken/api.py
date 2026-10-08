@@ -754,13 +754,11 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         frappe.log_error("Checking for existing relation with filters", str(filters))
 
         # Execute the query and log the SQL for debugging
-        frappe.flags.in_test = True  # This will log the SQL query
         existing = frappe.get_all(
             "Relation", 
             filters=filters,
             fields=["name", "administration"]
         )
-        frappe.flags.in_test = False
         
         # Log the query results
         frappe.log_error("Existing relation query results", str(existing))
