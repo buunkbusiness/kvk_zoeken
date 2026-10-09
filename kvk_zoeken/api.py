@@ -192,6 +192,34 @@ def get_kvk_basisprofiel(kvk_nummer, geo_data=False):
         frappe.log_error("KVK Basisprofiel API Error", str(e))
         return {"error": str(e)}
 
+def relation_address(addresses):
+    """The address a relation gets from the KvK: the visiting address where the company is
+    established, else the first one (e.g. a PO box)."""
+    first_addr = next((a for a in addresses if a.get("type") == "bezoekadres"), addresses[0])
+    if first_addr.get("post_box_number") and not first_addr.get("house_number"):
+        street = f"Postbus {first_addr['post_box_number']}"
+    else:
+        street = " ".join(
+            str(part)
+            for part in (
+                first_addr.get("street_name"),
+                f"{first_addr.get('house_number') or ''}{first_addr.get('house_letter') or ''}",
+                first_addr.get("house_number_addition"),
+            )
+            if part
+        )
+    postal_code = first_addr.get("postal_code") or ""
+    if len(postal_code) == 6 and postal_code[:4].isdigit():
+        postal_code = f"{postal_code[:4]} {postal_code[4:]}"
+    return {
+        "formatted_address": " ".join((first_addr.get("full_address") or "").split()),
+        "street_address": street.strip(),
+        "postal_code": postal_code,
+        "city": first_addr.get("city") or "",
+        "country": first_addr.get("country") or "Nederland",
+    }
+
+
 # The KvK gives Dutch country names; an Address links to Frappe's Country, named in English
 DUTCH_COUNTRIES = {
     "Nederland": "Netherlands",
@@ -858,32 +886,8 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         
         if kvk_address:
             address_data["formatted_address"] = kvk_address
-        elif company_data and company_data.get("addresses") and len(company_data["addresses"]) > 0:
-            # The visiting address where the company is established, else the first one (e.g. a PO box)
-            addresses = company_data["addresses"]
-            first_addr = next((a for a in addresses if a.get("type") == "bezoekadres"), addresses[0])
-            if first_addr.get("post_box_number") and not first_addr.get("house_number"):
-                street = f"Postbus {first_addr['post_box_number']}"
-            else:
-                street = " ".join(
-                    str(part)
-                    for part in (
-                        first_addr.get("street_name"),
-                        f"{first_addr.get('house_number') or ''}{first_addr.get('house_letter') or ''}",
-                        first_addr.get("house_number_addition"),
-                    )
-                    if part
-                )
-            postal_code = first_addr.get("postal_code", "")
-            if len(postal_code) == 6 and postal_code[:4].isdigit():
-                postal_code = f"{postal_code[:4]} {postal_code[4:]}"
-            address_data = {
-                "formatted_address": " ".join((first_addr.get("full_address") or "").split()),
-                "street_address": street.strip(),
-                "postal_code": postal_code,
-                "city": first_addr.get("city", ""),
-                "country": first_addr.get("country", "Nederland")
-            }
+        elif company_data and company_data.get("addresses"):
+            address_data = relation_address(company_data["addresses"])
         
         # Set address fields
         relation.kvk_address = address_data["formatted_address"]
@@ -891,6 +895,8 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         relation.postal_code = address_data["postal_code"]
         relation.city = address_data["city"]
         relation.country = address_data["country"]
+        if relation.meta.has_field("kvk_checked_on") and complete_data and complete_data.get("basisprofiel_data"):
+            relation.kvk_checked_on = frappe.utils.now()
         
         # Insert the relation and handle any potential errors
         try:

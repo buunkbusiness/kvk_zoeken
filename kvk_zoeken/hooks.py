@@ -153,9 +153,11 @@ scheduler_events = {
 # 	"hourly": [
 # 		"kvk_zoeken.tasks.hourly"
 # 	],
- 	"weekly": [
- 		"kvk_zoeken.api.bulk_sync_kvk_relations"
- 	],
+# 	"weekly": [
+# 		# Off: every basisprofiel request is paid, and it overwrote addresses people had corrected.
+# 		# A relation is refreshed on request instead (stale data is offered when it is used).
+# 		"kvk_zoeken.api.bulk_sync_kvk_relations"
+# 	],
 # 	"monthly": [
 # 		"kvk_zoeken.tasks.monthly"
 # 	],
