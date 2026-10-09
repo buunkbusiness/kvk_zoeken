@@ -155,8 +155,8 @@ def get_kvk_basisprofiel(kvk_nummer, geo_data=False):
     }
     
     # Build query parameters
+    # The KvK number goes in the path; as a parameter too, the API refuses the request
     params = {
-        "kvkNummer": kvk_nummer,
         "geoData": "true" if geo_data else "false"
     }
     
@@ -191,6 +191,27 @@ def get_kvk_basisprofiel(kvk_nummer, geo_data=False):
     except requests.exceptions.RequestException as e:
         frappe.log_error("KVK Basisprofiel API Error", str(e))
         return {"error": str(e)}
+
+# The KvK gives Dutch country names; an Address links to Frappe's Country, named in English
+DUTCH_COUNTRIES = {
+    "Nederland": "Netherlands",
+    "België": "Belgium",
+    "Duitsland": "Germany",
+    "Frankrijk": "France",
+    "Verenigd Koninkrijk": "United Kingdom",
+    "Luxemburg": "Luxembourg",
+    "Spanje": "Spain",
+    "Italië": "Italy",
+    "Verenigde Staten": "United States",
+}
+
+
+def frappe_country(name):
+    """The Country record for a (Dutch) country name; the Netherlands when unknown."""
+    name = (name or "").strip()
+    name = DUTCH_COUNTRIES.get(name, name)
+    return name if name and frappe.db.exists("Country", name) else "Netherlands"
+
 
 def process_kvk_address(address_data, provided_address=None):
     """
@@ -429,6 +450,12 @@ def process_basisprofiel_data(basisprofiel_data):
                 "is_main_activity": sbi.get("indHoofdactiviteit", "") == "Ja"
             })
     
+    # The API puts the main establishment and the owner under _embedded
+    embedded = basisprofiel_data.get("_embedded") or {}
+    for key in ("hoofdvestiging", "eigenaar"):
+        if key not in basisprofiel_data and key in embedded:
+            basisprofiel_data[key] = embedded[key]
+
     # Process main establishment (hoofdvestiging)
     if "hoofdvestiging" in basisprofiel_data:
         hv = basisprofiel_data["hoofdvestiging"]
@@ -617,11 +644,6 @@ def get_complete_company_data(kvk_nummer, geo_data=False):
             # Process the complete basisprofiel data
             result["basisprofiel_data"] = basisprofiel_response
             result["processed_data"] = process_basisprofiel_data(basisprofiel_response)
-            
-            # Also get search data for additional context if needed
-            search_response = search_kvk(kvk_nummer=kvk_nummer)
-            if "resultaten" in search_response and search_response["resultaten"]:
-                result["search_data"] = search_response
     
     except Exception as e:
         frappe.log_error("Complete Company Data Error", str(e))
@@ -723,6 +745,26 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
                 "message": "Administration is required"
             }
         
+        # Check first: the basisprofiel request below is paid per call
+        # Make sure to use exact field names from the Relation DocType
+        filters = {
+            "kvk_number": kvk_nummer,
+            "administration": administration
+        }
+
+        existing = frappe.get_all(
+            "Relation", 
+            filters=filters,
+            fields=["name", "administration"]
+        )
+        
+        if existing:
+            return {
+                "success": False,
+                "message": f"A relation with KVK number {kvk_nummer} already exists for administration {existing[0].get('administration', 'unknown')}",
+                "relation": existing[0].name
+            }
+        
         # Determine if we need to fetch KVK data or use provided parameters
         fetch_from_kvk = not company_name  # If company_name is not provided, fetch from KVK
         company_data = None
@@ -739,37 +781,6 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
                 }
             
             company_data = complete_data["processed_data"]
-        
-        # Log the response from the KVK server for debugging
-        frappe.log_error("KVK API Debug", f"Complete KVK API Response: {complete_data}")
-        
-        # Check if relation with this KVK number already exists for the given administration
-        # Make sure to use exact field names from the Relation DocType
-        filters = {
-            "kvk_number": kvk_nummer,
-            "administration": administration
-        }
-
-        # Log the filters for debugging
-        frappe.log_error("Checking for existing relation with filters", str(filters))
-
-        # Execute the query and log the SQL for debugging
-        existing = frappe.get_all(
-            "Relation", 
-            filters=filters,
-            fields=["name", "administration"]
-        )
-        
-        # Log the query results
-        frappe.log_error("Existing relation query results", str(existing))
-
-        if existing:
-            frappe.log_error("Found existing relation", str(existing))
-            return {
-                "success": False,
-                "message": f"A relation with KVK number {kvk_nummer} already exists for administration {existing[0].get('administration', 'unknown')}",
-                "relation": existing[0].name
-            }
         
         # Create new relation
         relation = frappe.new_doc("Relation")
@@ -789,6 +800,9 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
             
         if company_type:
             relation.company_type = company_type
+        elif company_data and (company_data.get("owner_info") or {}).get("legal_form"):
+            # The legal form of the owner, e.g. "Besloten vennootschap"
+            relation.company_type = company_data["owner_info"]["legal_form"]
         elif company_data and company_data.get("basic_info"):
             relation.company_type = company_data["basic_info"].get("company_type", "")
             
@@ -845,19 +859,31 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         if kvk_address:
             address_data["formatted_address"] = kvk_address
         elif company_data and company_data.get("addresses") and len(company_data["addresses"]) > 0:
-            # Use the first available address
-            first_addr = company_data["addresses"][0]
+            # The visiting address where the company is established, else the first one (e.g. a PO box)
+            addresses = company_data["addresses"]
+            first_addr = next((a for a in addresses if a.get("type") == "bezoekadres"), addresses[0])
+            if first_addr.get("post_box_number") and not first_addr.get("house_number"):
+                street = f"Postbus {first_addr['post_box_number']}"
+            else:
+                street = " ".join(
+                    str(part)
+                    for part in (
+                        first_addr.get("street_name"),
+                        f"{first_addr.get('house_number') or ''}{first_addr.get('house_letter') or ''}",
+                        first_addr.get("house_number_addition"),
+                    )
+                    if part
+                )
+            postal_code = first_addr.get("postal_code", "")
+            if len(postal_code) == 6 and postal_code[:4].isdigit():
+                postal_code = f"{postal_code[:4]} {postal_code[4:]}"
             address_data = {
-                "formatted_address": first_addr.get("full_address", ""),
-                "street_address": first_addr.get("street_name", "") + " " + str(first_addr.get("house_number", "")).strip(),
-                "postal_code": first_addr.get("postal_code", ""),
+                "formatted_address": " ".join((first_addr.get("full_address") or "").split()),
+                "street_address": street.strip(),
+                "postal_code": postal_code,
                 "city": first_addr.get("city", ""),
-                "country": first_addr.get("country", "Netherlands")
+                "country": first_addr.get("country", "Nederland")
             }
-            # Clean up street address
-            address_data["street_address"] = address_data["street_address"].strip()
-            if first_addr.get("house_letter"):
-                address_data["street_address"] += first_addr["house_letter"]
         
         # Set address fields
         relation.kvk_address = address_data["formatted_address"]
@@ -869,7 +895,6 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
         # Insert the relation and handle any potential errors
         try:
             relation.insert()
-            frappe.log_error(f"Relation inserted successfully: {relation.name}")
         except Exception as insert_error:
             frappe.log_error(f"Error inserting relation: {str(insert_error)}")
             # Check if it's a duplicate entry error
@@ -903,7 +928,6 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
                 address_doc.address_type = "Office"  # Default type
                 
                 # Debug: Log the address data we received
-                frappe.log_error("Address data being processed", str(address))
                 
                 # Use the processed address data - build street address carefully
                 street_address = ""
@@ -942,7 +966,7 @@ def create_relation_from_kvk(kvk_nummer, administration, company_name=None, comp
                 
                 # Set city with fallbacks    
                 address_doc.city = city or "Unknown"
-                address_doc.country = address.get("country", "Netherlands")
+                address_doc.country = frappe_country(address.get("country"))
                 address_doc.pincode = address.get("postal_code", "")
                 
                 # Set administration field
@@ -997,7 +1021,6 @@ def save_addresses_to_relation(relation_name, addresses_data, administration=Non
             address_doc.address_type = "Billing"  # Default type, can be adjusted
             
             # Debug: Log the address data we received
-            frappe.log_error("Address data being processed in save_addresses_to_relation", str(address))
             
             # Build street address carefully using available fields
             street_address = ""
@@ -1036,7 +1059,7 @@ def save_addresses_to_relation(relation_name, addresses_data, administration=Non
             
             # Set city and other fields with fallbacks
             address_doc.city = city or "Unknown"
-            address_doc.country = address.get("country", "Netherlands")
+            address_doc.country = frappe_country(address.get("country"))
             address_doc.pincode = address.get("postal_code", "")
             
             # Set administration field if provided
